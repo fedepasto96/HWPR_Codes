@@ -412,38 +412,6 @@ function getTextUpToLine(text, lineNumber) {
 
 // *** Automated Triggers ***
 
-// Calendar-based trigger: Check if calendar event exists and run script
-function checkCalendarAndRun() {
-  // 1. Enter the exact name of your calendar event
-  var targetEventName = "Prepare Slides for the team"; 
-  
-  // 2. Get today's date
-  var today = new Date();
-  
-  // 3. Get your default calendar
-  var calendar = CalendarApp.getDefaultCalendar();
-  
-  // 4. Get all events for today
-  var events = calendar.getEventsForDay(today);
-  
-  // 5. Loop through events to find a match
-  var eventFound = false;
-  for (var i = 0; i < events.length; i++) {
-    if (events[i].getTitle().includes(targetEventName)) {
-      eventFound = true;
-      break;
-    }
-  }
-  
-  // 6. If the event exists today, run your main function
-  if (eventFound) {
-    console.log("Event found! Running script...");
-    doMagic(); // <--- This calls your original function
-  } else {
-    console.log("Event not found today. Skipping.");
-  }
-}
-
 // Time-based trigger: Run every Monday at 11:00 AM, but only if it's the Monday before sprint end
 function runOnMondayIfBeforeSprintEnd() {
   var today = new Date();
@@ -490,26 +458,6 @@ function setupMondayTrigger() {
     .create();
   
   console.log("Monday trigger set up successfully! Script will run every Monday at 11:00 AM.");
-}
-
-// Function to set up the calendar-based trigger (runs daily to check for calendar events)
-function setupCalendarTrigger() {
-  // Delete any existing triggers with the same function name
-  var triggers = ScriptApp.getProjectTriggers();
-  triggers.forEach(function(trigger) {
-    if (trigger.getHandlerFunction() === 'checkCalendarAndRun') {
-      ScriptApp.deleteTrigger(trigger);
-    }
-  });
-  
-  // Create a new trigger that runs daily
-  ScriptApp.newTrigger('checkCalendarAndRun')
-    .timeBased()
-    .everyDays(1)
-    .atHour(9) // 9:00 AM - adjust as needed
-    .create();
-  
-  console.log("Calendar trigger set up successfully! Script will check for calendar events daily at 9:00 AM.");
 }
 
 // *** end of script *** 
