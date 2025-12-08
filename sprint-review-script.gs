@@ -1,7 +1,5 @@
 // *** Defines *** 
 
-
-
 const BODY_TEXT_PATTERN = "\\{\\{body_text\\}\\}";
 
 const STORY_KEY_PATTERN = "\\{\\{story_key\\}\\}";
@@ -10,43 +8,78 @@ const TEMPLATE_PRESENTATION_ID = "1idVd8G-Ec1L2yMF3_fz-eVmpeEYtB1m1I2eWhwW-AGk";
 
 // *** Presentation Information *** 
 
-// Sprint configuration
-const SPRINT_DURATION_DAYS = 14; // 2 weeks
-const SPRINT_START_REFERENCE_DATE = new Date("2025-01-06"); // Reference Monday for sprint calculation
-
 const teamName = "HW-PR";
 
-// Calculate sprint information dynamically
+// Calculate sprint information dynamically from spreadsheet
 function getSprintInfo() {
-  var today = new Date();
-  today.setHours(0, 0, 0, 0);
+  var sheet = SpreadsheetApp.getActive().getSheets()[0];
+  var dataRange = sheet.getDataRange();
+  var values = dataRange.getValues();
   
-  // Format sprint number as year-week (e.g., "25-21") based on current date
-  var year = today.getFullYear().toString().substring(2);
-  var weekNumber = getWeekNumber(today);
-  var sprintNumber = year + "-" + weekNumber;
+  var maxSprintEndDate = null;
+  var maxSprintNumber = null;
   
-  // Calculate sprint boundaries based on reference date
-  // Find which sprint we're in by calculating days from reference
-  var daysDiff = Math.floor((today - SPRINT_START_REFERENCE_DATE) / (1000 * 60 * 60 * 24));
-  var sprintIndex = Math.floor(daysDiff / SPRINT_DURATION_DAYS);
+  // Column Z is index 25 (Sprint.endDate)
+  // Column AA is index 26 (Sprint.name)
+  var endDateCol = 25; // Column Z
+  var sprintNameCol = 26; // Column AA
   
-  // Calculate sprint start date
-  var sprintStartDate = new Date(SPRINT_START_REFERENCE_DATE);
-  sprintStartDate.setDate(sprintStartDate.getDate() + sprintIndex * SPRINT_DURATION_DAYS);
+  // Skip header row (index 0)
+  for (var i = 1; i < values.length; i++) {
+    var row = values[i];
+    
+    // Get sprint end date from column Z
+    var endDateValue = row[endDateCol];
+    var dateObj = null;
+    
+    if (endDateValue) {
+      if (endDateValue instanceof Date) {
+        dateObj = endDateValue;
+      } else if (typeof endDateValue === 'string') {
+        // Try to parse ISO date string (e.g., "2025-12-15T07:29:18.000Z")
+        dateObj = new Date(endDateValue);
+        if (isNaN(dateObj.getTime())) {
+          dateObj = null; // Invalid date
+        }
+      }
+      
+      if (dateObj && (!maxSprintEndDate || dateObj > maxSprintEndDate)) {
+        maxSprintEndDate = dateObj;
+      }
+    }
+    
+    // Get sprint name from column AA and extract sprint number
+    var sprintName = row[sprintNameCol];
+    if (sprintName && typeof sprintName === 'string') {
+      // Extract sprint number from format "HW-PR Sprint 25-22"
+      var match = sprintName.match(/Sprint\s+(\d{2}-\d{2})/);
+      if (match && match[1]) {
+        var sprintNum = match[1];
+        // Compare sprint numbers (e.g., "25-22" vs "25-21")
+        if (!maxSprintNumber || sprintNum > maxSprintNumber) {
+          maxSprintNumber = sprintNum;
+        }
+      }
+    }
+  }
   
-  // Calculate sprint end date (sprint ends on the last day of the 2-week period)
-  var sprintEndDate = new Date(sprintStartDate);
-  sprintEndDate.setDate(sprintEndDate.getDate() + SPRINT_DURATION_DAYS - 1);
+  // If no data found, fall back to current date calculation
+  if (!maxSprintEndDate || !maxSprintNumber) {
+    var today = new Date();
+    var year = today.getFullYear().toString().substring(2);
+    var weekNumber = getWeekNumber(today);
+    maxSprintNumber = year + "-" + weekNumber;
+    maxSprintEndDate = new Date(today);
+    maxSprintEndDate.setDate(maxSprintEndDate.getDate() + 7); // Default to 7 days from now
+  }
   
   // Find the last Friday before the sprint end date
-  var reviewDate = getLastFridayBefore(sprintEndDate);
+  var reviewDate = getLastFridayBefore(maxSprintEndDate);
   
   return {
-    sprintNumber: sprintNumber,
+    sprintNumber: maxSprintNumber,
     reviewDate: formatDate(reviewDate),
-    sprintStartDate: sprintStartDate,
-    sprintEndDate: sprintEndDate
+    sprintEndDate: maxSprintEndDate
   };
 }
 
