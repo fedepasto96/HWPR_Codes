@@ -6,6 +6,15 @@ const STORY_KEY_PATTERN = "\\{\\{story_key\\}\\}";
 
 const TEMPLATE_PRESENTATION_ID = "1idVd8G-Ec1L2yMF3_fz-eVmpeEYtB1m1I2eWhwW-AGk";
 
+// Column indices (0-based: A=0, B=1, C=2, D=3, E=4, F=5, G=6, etc.)
+const COL_ISSUE_TYPE = 0;      // Column A
+const COL_STORY_KEY = 2;        // Column C
+const COL_STORY_SUMMARY = 3;    // Column D
+const COL_STORY_DESCRIPTION = 4; // Column E - adjust if description is in a different column
+const COL_STORY_STATUS = 5;     // Column F
+const COL_OWNER = 6;            // Column G
+const COL_EPIC_LINK = 17;       // Column R
+
 // *** Presentation Information *** 
 
 const teamName = "HW-PR";
@@ -202,27 +211,46 @@ function fillTemplate() {
 
     // get values from row for the next slide
 
-    var issueType = row[0].getText();
+    var issueType = row[COL_ISSUE_TYPE].getText();
 
-    var epicLink = row[17].getText();
+    var epicLink = row[COL_EPIC_LINK].getText();
 
-    var storyKey = row[2].getText();
+    var storyKey = row[COL_STORY_KEY].getText();
 
-    var url = row[2].getLinkUrl();
+    var url = row[COL_STORY_KEY].getLinkUrl();
 
-    var storySummary = row[3].getText();
+    var storySummary = row[COL_STORY_SUMMARY].getText();
 
-    var storyDescription = row[4].getText();
+    // Get story description - handle empty cells properly
+    var storyDescription = "";
+    if (row[COL_STORY_DESCRIPTION]) {
+      if (row[COL_STORY_DESCRIPTION].getText && typeof row[COL_STORY_DESCRIPTION].getText === 'function') {
+        storyDescription = row[COL_STORY_DESCRIPTION].getText();
+      } else if (typeof row[COL_STORY_DESCRIPTION] === 'string') {
+        storyDescription = row[COL_STORY_DESCRIPTION];
+      }
+    }
+    
+    // Debug logging for first non-header row
+    if (storyKey != "Key" && count === 0) {
+      console.log("DEBUG - Story Key: " + storyKey);
+      console.log("DEBUG - Story Summary: " + storySummary);
+      var descPreview = storyDescription ? storyDescription.substring(0, Math.min(100, storyDescription.length)) : "(empty)";
+      console.log("DEBUG - Story Description (col index " + COL_STORY_DESCRIPTION + "): " + descPreview);
+    }
 
-    var storyStatus = row[5].getText().toString().toUpperCase();
+    var storyStatus = row[COL_STORY_STATUS].getText().toString().toUpperCase();
 
-    var owner = row[6].getText();
+    var owner = row[COL_OWNER].getText();
 
     var storyAcceptanceCriteria = "";
 
-    // Cut the story description up to line 8
-
-    storyDescription = getTextUpToLine(storyDescription, 8);
+    // Cut the story description up to line 8 (only if description exists)
+    if (storyDescription && storyDescription.trim() !== "") {
+      storyDescription = getTextUpToLine(storyDescription, 8);
+    } else {
+      storyDescription = ""; // Set to empty string if no description
+    }
 
     // Skip header row
 
@@ -257,6 +285,8 @@ function fillTemplate() {
       lastSlide.replaceAllText("{{owner}}", owner);
 
       // TODO add subtasks if any to body text
+      
+      count++;
 
     }
 
