@@ -10,15 +10,75 @@ const TEMPLATE_PRESENTATION_ID = "1idVd8G-Ec1L2yMF3_fz-eVmpeEYtB1m1I2eWhwW-AGk";
 
 // *** Presentation Information *** 
 
-const sprintNumber = "25-21";
-
-const reviewDate = "2025-11-28";
+// Sprint configuration
+const SPRINT_DURATION_DAYS = 14; // 2 weeks
+const SPRINT_START_REFERENCE_DATE = new Date("2025-01-06"); // Reference Monday for sprint calculation
 
 const teamName = "HW-PR";
 
-const slidesTitle = "Sprint " + sprintNumber + " Review " + reviewDate;
+// Calculate sprint information dynamically
+function getSprintInfo() {
+  var today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  // Format sprint number as year-week (e.g., "25-21") based on current date
+  var year = today.getFullYear().toString().substring(2);
+  var weekNumber = getWeekNumber(today);
+  var sprintNumber = year + "-" + weekNumber;
+  
+  // Calculate sprint boundaries based on reference date
+  // Find which sprint we're in by calculating days from reference
+  var daysDiff = Math.floor((today - SPRINT_START_REFERENCE_DATE) / (1000 * 60 * 60 * 24));
+  var sprintIndex = Math.floor(daysDiff / SPRINT_DURATION_DAYS);
+  
+  // Calculate sprint start date
+  var sprintStartDate = new Date(SPRINT_START_REFERENCE_DATE);
+  sprintStartDate.setDate(sprintStartDate.getDate() + sprintIndex * SPRINT_DURATION_DAYS);
+  
+  // Calculate sprint end date (sprint ends on the last day of the 2-week period)
+  var sprintEndDate = new Date(sprintStartDate);
+  sprintEndDate.setDate(sprintEndDate.getDate() + SPRINT_DURATION_DAYS - 1);
+  
+  // Find the last Friday before the sprint end date
+  var reviewDate = getLastFridayBefore(sprintEndDate);
+  
+  return {
+    sprintNumber: sprintNumber,
+    reviewDate: formatDate(reviewDate),
+    sprintStartDate: sprintStartDate,
+    sprintEndDate: sprintEndDate
+  };
+}
 
-const slidesSubtitle = "HW - Propulsion";
+function getLastFridayBefore(endDate) {
+  var date = new Date(endDate);
+  // Go back up to 7 days to find the last Friday
+  for (var i = 0; i < 7; i++) {
+    if (date.getDay() === 5) { // 5 = Friday
+      return date;
+    }
+    date.setDate(date.getDate() - 1);
+  }
+  // If no Friday found (shouldn't happen), return the end date
+  return endDate;
+}
+
+function getWeekNumber(date) {
+  var d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  var dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  var yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+}
+
+function formatDate(date) {
+  var year = date.getFullYear();
+  var month = date.getMonth() + 1;
+  var day = date.getDate();
+  var monthStr = month < 10 ? "0" + month : month.toString();
+  var dayStr = day < 10 ? "0" + day : day.toString();
+  return year + "-" + monthStr + "-" + dayStr;
+}
 
 // *** main *** 
 
@@ -44,8 +104,17 @@ function buttonPressed() {
 
 function fillTemplate() {
 
+  // Get current sprint information
+  var sprintInfo = getSprintInfo();
+  var sprintNumber = sprintInfo.sprintNumber;
+  var reviewDate = sprintInfo.reviewDate;
+  var slidesTitle = "Sprint " + sprintNumber + " Review " + reviewDate;
+  var slidesSubtitle = "HW - Propulsion";
+
   var slidesFileName = reviewDate + "_" + teamName + "_Sprint-" + sprintNumber + "_Review";
 
+  console.log("Sprint Number: " + sprintNumber);
+  console.log("Review Date: " + reviewDate);
   console.log("Slides title: " + slidesTitle);
 
   console.log("File name: " + slidesFileName);
