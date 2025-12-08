@@ -146,6 +146,8 @@ function buttonPressed() {
 
 function fillTemplate() {
 
+  console.log("=== fillTemplate() called at: " + new Date().toISOString() + " ===");
+
   // Get current sprint information
   var sprintInfo = getSprintInfo();
   var sprintNumber = sprintInfo.sprintNumber;
@@ -201,11 +203,13 @@ function fillTemplate() {
 
   var storyCount = values.length;
 
-  console.log("Story count: " + storyCount);
+  console.log("Total rows in spreadsheet: " + storyCount);
+  console.log("Will process stories (excluding header and duplicates)...");
 
   // Replace template variables in the presentation with values
 
   var count = 0;
+  var processedStoryKeys = {}; // Track processed story keys to avoid duplicates
 
   values.forEach(function (row) {
 
@@ -252,9 +256,18 @@ function fillTemplate() {
       storyDescription = ""; // Set to empty string if no description
     }
 
-    // Skip header row
+    // Skip header row and check for duplicates
 
-    if (storyKey != "Key") {
+    if (storyKey != "Key" && storyKey && storyKey.trim() !== "") {
+      
+      // Check if we've already processed this story key
+      if (processedStoryKeys[storyKey]) {
+        console.log("Skipping duplicate story key: " + storyKey);
+        return; // Skip this row
+      }
+      
+      // Mark this story key as processed
+      processedStoryKeys[storyKey] = true;
 
       // add one more slide
 
@@ -296,7 +309,8 @@ function fillTemplate() {
 
   //templateSlide.remove();
 
-  console.log("Slide deck creation completed");
+  console.log("Slide deck creation completed. Total slides created: " + count);
+  console.log("=== fillTemplate() finished ===");
 
 }
 
