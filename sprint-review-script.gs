@@ -410,5 +410,107 @@ function getTextUpToLine(text, lineNumber) {
 
 }
 
+// *** Automated Triggers ***
+
+// Calendar-based trigger: Check if calendar event exists and run script
+function checkCalendarAndRun() {
+  // 1. Enter the exact name of your calendar event
+  var targetEventName = "Prepare Slides for the team"; 
+  
+  // 2. Get today's date
+  var today = new Date();
+  
+  // 3. Get your default calendar
+  var calendar = CalendarApp.getDefaultCalendar();
+  
+  // 4. Get all events for today
+  var events = calendar.getEventsForDay(today);
+  
+  // 5. Loop through events to find a match
+  var eventFound = false;
+  for (var i = 0; i < events.length; i++) {
+    if (events[i].getTitle().includes(targetEventName)) {
+      eventFound = true;
+      break;
+    }
+  }
+  
+  // 6. If the event exists today, run your main function
+  if (eventFound) {
+    console.log("Event found! Running script...");
+    doMagic(); // <--- This calls your original function
+  } else {
+    console.log("Event not found today. Skipping.");
+  }
+}
+
+// Time-based trigger: Run every Monday at 11:00 AM, but only if it's the Monday before sprint end
+function runOnMondayIfBeforeSprintEnd() {
+  var today = new Date();
+  var dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
+  
+  // Only run on Mondays
+  if (dayOfWeek !== 1) {
+    console.log("Not a Monday. Skipping.");
+    return;
+  }
+  
+  // Get sprint info to check if we're in the week before sprint ends
+  var sprintInfo = getSprintInfo();
+  var sprintEndDate = sprintInfo.sprintEndDate;
+  
+  // Check if today is within 7 days before the sprint end date
+  var daysUntilSprintEnd = Math.floor((sprintEndDate - today) / (1000 * 60 * 60 * 24));
+  
+  if (daysUntilSprintEnd >= 0 && daysUntilSprintEnd <= 7) {
+    console.log("Monday before sprint end detected. Days until sprint end: " + daysUntilSprintEnd);
+    console.log("Running script...");
+    doMagic();
+  } else {
+    console.log("Not the Monday before sprint end. Days until sprint end: " + daysUntilSprintEnd + ". Skipping.");
+  }
+}
+
+// Function to set up the time-based trigger (run this once manually)
+function setupMondayTrigger() {
+  // Delete any existing triggers with the same function name
+  var triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(function(trigger) {
+    if (trigger.getHandlerFunction() === 'runOnMondayIfBeforeSprintEnd') {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
+  
+  // Create a new trigger for every Monday at 11:00 AM
+  ScriptApp.newTrigger('runOnMondayIfBeforeSprintEnd')
+    .timeBased()
+    .everyWeeks(1)
+    .onWeekDay(ScriptApp.WeekDay.MONDAY)
+    .atHour(11) // 11:00 AM
+    .create();
+  
+  console.log("Monday trigger set up successfully! Script will run every Monday at 11:00 AM.");
+}
+
+// Function to set up the calendar-based trigger (runs daily to check for calendar events)
+function setupCalendarTrigger() {
+  // Delete any existing triggers with the same function name
+  var triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(function(trigger) {
+    if (trigger.getHandlerFunction() === 'checkCalendarAndRun') {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
+  
+  // Create a new trigger that runs daily
+  ScriptApp.newTrigger('checkCalendarAndRun')
+    .timeBased()
+    .everyDays(1)
+    .atHour(9) // 9:00 AM - adjust as needed
+    .create();
+  
+  console.log("Calendar trigger set up successfully! Script will check for calendar events daily at 9:00 AM.");
+}
+
 // *** end of script *** 
 
