@@ -18,6 +18,7 @@ const COL_EPIC_LINK = 17;       // Column R
 // *** Presentation Information *** 
 
 const teamName = "HW-PR";
+const SLACK_WEBHOOK_PROPERTY_KEY = "SLACK_WEBHOOK_URL";
 
 // Calculate sprint information dynamically from spreadsheet
 function getSprintInfo() {
@@ -205,9 +206,11 @@ function fillTemplate() {
     var outputFolderName = outputFolder.getName();
     var outputFolderUrl = outputFolder.getUrl();
 
+    var presentationUrl = "https://docs.google.com/presentation/d/" + PRESENTATION_ID;
+
     console.log("PRESENTATION_ID: " + PRESENTATION_ID);
     console.log("OUTPUT LOCATION: " + outputFolderName + " (" + outputFolderUrl + ")");
-    console.log("Presentation URL: https://docs.google.com/presentation/d/" + PRESENTATION_ID);
+    console.log("Presentation URL: " + presentationUrl);
 
     // Open the presentation
 
@@ -382,6 +385,14 @@ function fillTemplate() {
     if (errorCount > 0) {
       console.log("WARNING: " + errorCount + " rows had errors and were skipped.");
     }
+
+    // Send Slack notification (if webhook is configured)
+    sendSlackSlidesNotification(
+      presentationUrl,
+      "Sprint review slides for the team",
+      slidesFileName
+    );
+
     console.log("=== fillTemplate() finished ===");
     
   } catch (error) {
@@ -554,6 +565,55 @@ function getTextUpToLine(text, lineNumber) {
 
   }
 
+}
+
+function sendSlackSlidesNotification(slidesUrl, messageText, deckName) {
+  try {
+    var webhookUrl = PropertiesService.getScriptProperties().getProperty(SLACK_WEBHOOK_PROPERTY_KEY);
+    if (!webhookUrl) {
+      console.log("Slack notification skipped: missing Script Property " + SLACK_WEBHOOK_PROPERTY_KEY);
+      return;
+    }
+
+    var payload = {
+      text: messageText + "\n" + slidesUrl,
+      unfurl_links: true,
+      attachments: [
+        {
+          color: "#2eb886",
+          title: deckName,
+          title_link: slidesUrl,
+          text: "Sprint review slides deck is ready."
+        }
+      ]
+    };
+
+    var options = {
+      method: "post",
+      contentType: "application/json",
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    };
+
+    var response = UrlFetchApp.fetch(webhookUrl, options);
+    var statusCode = response.getResponseCode();
+    if (statusCode >= 200 && statusCode < 300) {
+      console.log("Slack notification sent successfully.");
+    } else {
+      console.log("Slack notification failed. HTTP " + statusCode + ": " + response.getContentText());
+    }
+  } catch (e) {
+    console.log("Slack notification error: " + e.toString());
+  }
+}
+
+// Run once manually to configure the incoming webhook URL.
+function setSlackWebhookUrl(url) {
+  if (!url || typeof url !== "string" || url.indexOf("https://hooks.slack.com/services/") !== 0) {
+    throw new Error("Invalid Slack webhook URL.");
+  }
+  PropertiesService.getScriptProperties().setProperty(SLACK_WEBHOOK_PROPERTY_KEY, url);
+  console.log("Slack webhook URL saved in Script Properties.");
 }
 
 // *** Automated Triggers ***
