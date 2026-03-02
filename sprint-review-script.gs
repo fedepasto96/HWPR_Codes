@@ -27,56 +27,77 @@ function getSprintInfo() {
   
   var maxSprintEndDate = null;
   var maxSprintNumber = null;
+  var fallbackMaxSprintNumber = null;
+  var fallbackMaxSprintOrder = -1;
   
   // Column Z is index 25 (Sprint.endDate)
   // Column AA is index 26 (Sprint.name)
   var endDateCol = 25; // Column Z
   var sprintNameCol = 26; // Column AA
+
+  function parseDateValue(value) {
+    if (!value) return null;
+    if (value instanceof Date) return value;
+    var dateObj = new Date(String(value));
+    if (isNaN(dateObj.getTime())) return null;
+    return dateObj;
+  }
+
+  function extractSprintNumber(value) {
+    if (value === null || value === undefined) return null;
+    var text = String(value);
+    // Accept formats like "Sprint 26-04", "HW-PR Sprint 26-4", case-insensitive.
+    var match = text.match(/sprint\s+(\d{2})-(\d{1,2})/i);
+    if (!match) return null;
+    var yy = match[1];
+    var ww = ("0" + parseInt(match[2], 10)).slice(-2);
+    return yy + "-" + ww;
+  }
+
+  function sprintOrder(sprintNum) {
+    if (!sprintNum) return -1;
+    var parts = sprintNum.split("-");
+    if (parts.length !== 2) return -1;
+    var yearPart = parseInt(parts[0], 10);
+    var weekPart = parseInt(parts[1], 10);
+    if (isNaN(yearPart) || isNaN(weekPart)) return -1;
+    return (yearPart * 100) + weekPart;
+  }
   
   // Skip header row (index 0)
   for (var i = 1; i < values.length; i++) {
     var row = values[i];
-    
-    // Get sprint end date from column Z
-    var endDateValue = row[endDateCol];
-    var dateObj = null;
-    
-    if (endDateValue) {
-      if (endDateValue instanceof Date) {
-        dateObj = endDateValue;
-      } else if (typeof endDateValue === 'string') {
-        // Try to parse ISO date string (e.g., "2025-12-15T07:29:18.000Z")
-        dateObj = new Date(endDateValue);
-        if (isNaN(dateObj.getTime())) {
-          dateObj = null; // Invalid date
-        }
-      }
-      
-      if (dateObj && (!maxSprintEndDate || dateObj > maxSprintEndDate)) {
-        maxSprintEndDate = dateObj;
+    var dateObj = parseDateValue(row[endDateCol]);
+    var sprintNum = extractSprintNumber(row[sprintNameCol]);
+
+    // Track max sprint number seen anywhere as fallback.
+    if (sprintNum) {
+      var order = sprintOrder(sprintNum);
+      if (order > fallbackMaxSprintOrder) {
+        fallbackMaxSprintOrder = order;
+        fallbackMaxSprintNumber = sprintNum;
       }
     }
-    
-    // Get sprint name from column AA and extract sprint number
-    var sprintName = row[sprintNameCol];
-    if (sprintName && typeof sprintName === 'string') {
-      // Extract sprint number from format "HW-PR Sprint 25-22"
-      var match = sprintName.match(/Sprint\s+(\d{2}-\d{2})/);
-      if (match && match[1]) {
-        var sprintNum = match[1];
-        // Compare sprint numbers (e.g., "25-22" vs "25-21")
-        if (!maxSprintNumber || sprintNum > maxSprintNumber) {
-          maxSprintNumber = sprintNum;
-        }
+
+    // Prefer latest sprint end date, taking sprint number from the same row.
+    if (dateObj && (!maxSprintEndDate || dateObj > maxSprintEndDate)) {
+      maxSprintEndDate = dateObj;
+      if (sprintNum) {
+        maxSprintNumber = sprintNum;
       }
     }
+  }
+
+  // If latest end-date row had no sprint name, use best fallback sprint number.
+  if (!maxSprintNumber && fallbackMaxSprintNumber) {
+    maxSprintNumber = fallbackMaxSprintNumber;
   }
   
   // If no data found, fall back to current date calculation
   if (!maxSprintEndDate || !maxSprintNumber) {
     var today = new Date();
     var year = today.getFullYear().toString().substring(2);
-    var weekNumber = getWeekNumber(today);
+    var weekNumber = ("0" + getWeekNumber(today)).slice(-2);
     maxSprintNumber = year + "-" + weekNumber;
     maxSprintEndDate = new Date(today);
     maxSprintEndDate.setDate(maxSprintEndDate.getDate() + 7); // Default to 7 days from now
