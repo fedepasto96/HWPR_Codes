@@ -146,207 +146,286 @@ function buttonPressed() {
 
 function fillTemplate() {
 
-  console.log("=== fillTemplate() called at: " + new Date().toISOString() + " ===");
+  try {
+    console.log("=== fillTemplate() called at: " + new Date().toISOString() + " ===");
 
-  // Get current sprint information
-  var sprintInfo = getSprintInfo();
-  var sprintNumber = sprintInfo.sprintNumber;
-  var reviewDate = sprintInfo.reviewDate;
-  var slidesTitle = "Sprint " + sprintNumber + " Review " + reviewDate;
-  var slidesSubtitle = "HW - Propulsion";
+    // Get current sprint information
+    var sprintInfo = getSprintInfo();
+    var sprintNumber = sprintInfo.sprintNumber;
+    var reviewDate = sprintInfo.reviewDate;
+    var slidesTitle = "Sprint " + sprintNumber + " Review " + reviewDate;
+    var slidesSubtitle = "HW - Propulsion";
 
-  var slidesFileName = reviewDate + "_" + teamName + "_Sprint-" + sprintNumber + "_Review";
+    var slidesFileName = reviewDate + "_" + teamName + "_Sprint-" + sprintNumber + "_Review";
 
-  console.log("Sprint Number: " + sprintNumber);
-  console.log("Review Date: " + reviewDate);
-  console.log("Slides title: " + slidesTitle);
+    console.log("Sprint Number: " + sprintNumber);
+    console.log("Review Date: " + reviewDate);
+    console.log("Slides title: " + slidesTitle);
 
-  console.log("File name: " + slidesFileName);
+    console.log("File name: " + slidesFileName);
 
-  // Create a copy of the presentation using DriveApp
+    // Create a copy of the presentation using DriveApp
 
-  var template = DriveApp.getFileById(TEMPLATE_PRESENTATION_ID);
+    var template = DriveApp.getFileById(TEMPLATE_PRESENTATION_ID);
 
-  var fileName = template.getName();
+    var fileName = template.getName();
 
-  console.log("Copy slide deck from template");
+    console.log("Copy slide deck from template");
 
-  var copy = template.makeCopy();
+    var copy = template.makeCopy();
 
-  copy.setName(slidesFileName);
+    copy.setName(slidesFileName);
 
-  var PRESENTATION_ID = copy.getId();
-
-  console.log("PRESENTATION_ID: " + PRESENTATION_ID);
-
-  // Open the presentation
-
-  var presentation = SlidesApp.openById(PRESENTATION_ID);
-
-  // extact key slides from new presentation
-
-  var slides = presentation.getSlides();
-
-  var templateSlide = slides[slides.length - 1];
-
-  var titleSlide = slides[0];
-
-  // Complete the title slide
-
-  titleSlide.replaceAllText("{{deckTitle}}", slidesTitle);
-
-  titleSlide.replaceAllText("{{deckSubtitle}}", slidesSubtitle);
-
-  // Read data from the spreadsheet
-
-  var values = SpreadsheetApp.getActive().getSheets()[0].getDataRange().getRichTextValues();
-
-  var storyCount = values.length;
-
-  console.log("Total rows in spreadsheet: " + storyCount);
-  console.log("Will process stories (excluding header and duplicates)...");
-
-  // Replace template variables in the presentation with values
-
-  var count = 0;
-  var processedStoryKeys = {}; // Track processed story keys to avoid duplicates
-
-  values.forEach(function (row) {
-
-    // get values from row for the next slide
-
-    var issueType = row[COL_ISSUE_TYPE].getText();
-
-    var epicLink = row[COL_EPIC_LINK].getText();
-
-    var storyKey = row[COL_STORY_KEY].getText();
-
-    var url = row[COL_STORY_KEY].getLinkUrl();
-
-    var storySummary = row[COL_STORY_SUMMARY].getText();
-
-    // Get story description - handle empty cells properly
-    var storyDescription = "";
-    if (row[COL_STORY_DESCRIPTION]) {
-      if (row[COL_STORY_DESCRIPTION].getText && typeof row[COL_STORY_DESCRIPTION].getText === 'function') {
-        storyDescription = row[COL_STORY_DESCRIPTION].getText();
-      } else if (typeof row[COL_STORY_DESCRIPTION] === 'string') {
-        storyDescription = row[COL_STORY_DESCRIPTION];
-      }
-    }
+    var PRESENTATION_ID = copy.getId();
     
-    // Debug logging for first non-header row
-    if (storyKey != "Key" && count === 0) {
-      console.log("DEBUG - Story Key: " + storyKey);
-      console.log("DEBUG - Story Summary: " + storySummary);
-      var descPreview = storyDescription ? storyDescription.substring(0, Math.min(100, storyDescription.length)) : "(empty)";
-      console.log("DEBUG - Story Description (col index " + COL_STORY_DESCRIPTION + "): " + descPreview);
+    // Get the folder where the template is located (or root if in root)
+    var templateParents = template.getParents();
+    var outputFolder = templateParents.hasNext() ? templateParents.next() : DriveApp.getRootFolder();
+    var outputFolderName = outputFolder.getName();
+    var outputFolderUrl = outputFolder.getUrl();
+
+    console.log("PRESENTATION_ID: " + PRESENTATION_ID);
+    console.log("OUTPUT LOCATION: " + outputFolderName + " (" + outputFolderUrl + ")");
+    console.log("Presentation URL: https://docs.google.com/presentation/d/" + PRESENTATION_ID);
+
+    // Open the presentation
+
+    var presentation = SlidesApp.openById(PRESENTATION_ID);
+
+    // extact key slides from new presentation
+
+    var slides = presentation.getSlides();
+
+    if (slides.length === 0) {
+      throw new Error("Template presentation has no slides!");
     }
 
-    var storyStatus = row[COL_STORY_STATUS].getText().toString().toUpperCase();
+    var templateSlide = slides[slides.length - 1];
 
-    var owner = row[COL_OWNER].getText();
+    var titleSlide = slides[0];
 
-    var storyAcceptanceCriteria = "";
+    // Complete the title slide
 
-    // Cut the story description up to line 8 (only if description exists)
-    if (storyDescription && storyDescription.trim() !== "") {
-      storyDescription = getTextUpToLine(storyDescription, 8);
-    } else {
-      storyDescription = ""; // Set to empty string if no description
+    titleSlide.replaceAllText("{{deckTitle}}", slidesTitle);
+
+    titleSlide.replaceAllText("{{deckSubtitle}}", slidesSubtitle);
+
+    // Read data from the spreadsheet - try getRichTextValues first, fallback to getValues
+
+    var sheet = SpreadsheetApp.getActive().getSheets()[0];
+    var dataRange = sheet.getDataRange();
+    var values = null;
+    var useRichText = true;
+
+    try {
+      values = dataRange.getRichTextValues();
+      console.log("Using getRichTextValues()");
+    } catch (e) {
+      console.log("getRichTextValues() failed, using getValues() instead. Error: " + e.toString());
+      values = dataRange.getValues();
+      useRichText = false;
     }
 
-    // Skip header row and check for duplicates
+    var storyCount = values.length;
 
-    if (storyKey != "Key" && storyKey && storyKey.trim() !== "") {
-      
-      // Check if we've already processed this story key
-      if (processedStoryKeys[storyKey]) {
-        console.log("Skipping duplicate story key: " + storyKey);
-        return; // Skip this row
+    console.log("Total rows in spreadsheet: " + storyCount);
+    console.log("Will process stories (excluding header and duplicates)...");
+
+    // Replace template variables in the presentation with values
+
+    var count = 0;
+    var processedStoryKeys = {}; // Track processed story keys to avoid duplicates
+    var errorCount = 0;
+
+    for (var rowIndex = 0; rowIndex < values.length; rowIndex++) {
+      try {
+        var row = values[rowIndex];
+
+        // Helper function to safely get text from a cell
+        function safeGetText(cell, defaultValue) {
+          if (!cell) return defaultValue || "";
+          if (useRichText && cell.getText && typeof cell.getText === 'function') {
+            try {
+              return cell.getText();
+            } catch (e) {
+              return defaultValue || "";
+            }
+          } else if (typeof cell === 'string') {
+            return cell;
+          } else if (cell !== null && cell !== undefined) {
+            return String(cell);
+          }
+          return defaultValue || "";
+        }
+
+        function safeGetLinkUrl(cell) {
+          if (!cell) return null;
+          if (useRichText && cell.getLinkUrl && typeof cell.getLinkUrl === 'function') {
+            try {
+              return cell.getLinkUrl();
+            } catch (e) {
+              return null;
+            }
+          }
+          return null;
+        }
+
+        // get values from row for the next slide - with null checks
+
+        var issueType = safeGetText(row[COL_ISSUE_TYPE], "");
+        var epicLink = safeGetText(row[COL_EPIC_LINK], "");
+        var storyKey = safeGetText(row[COL_STORY_KEY], "");
+        var url = safeGetLinkUrl(row[COL_STORY_KEY]);
+        var storySummary = safeGetText(row[COL_STORY_SUMMARY], "");
+
+        // Get story description - handle empty cells properly
+        var storyDescription = safeGetText(row[COL_STORY_DESCRIPTION], "");
+        
+        // Debug logging for first non-header row
+        if (storyKey != "Key" && count === 0) {
+          console.log("DEBUG - Story Key: " + storyKey);
+          console.log("DEBUG - Story Summary: " + storySummary);
+          var descPreview = storyDescription ? storyDescription.substring(0, Math.min(100, storyDescription.length)) : "(empty)";
+          console.log("DEBUG - Story Description (col index " + COL_STORY_DESCRIPTION + "): " + descPreview);
+        }
+
+        var storyStatus = safeGetText(row[COL_STORY_STATUS], "").toUpperCase();
+        var owner = safeGetText(row[COL_OWNER], "");
+        var storyAcceptanceCriteria = "";
+
+        // Cut the story description up to line 8 (only if description exists)
+        if (storyDescription && storyDescription.trim() !== "") {
+          storyDescription = getTextUpToLine(storyDescription, 8);
+        } else {
+          storyDescription = ""; // Set to empty string if no description
+        }
+
+        // Skip header row and check for duplicates
+
+        if (storyKey != "Key" && storyKey && storyKey.trim() !== "") {
+          
+          // Check if we've already processed this story key
+          if (processedStoryKeys[storyKey]) {
+            console.log("Skipping duplicate story key: " + storyKey);
+            continue; // Skip this row
+          }
+          
+          // Mark this story key as processed
+          processedStoryKeys[storyKey] = true;
+
+          // add one more slide
+
+          presentation.appendSlide(templateSlide);
+
+          // update slides after appending a new slide
+
+          slides = presentation.getSlides();
+
+          var lastSlide = slides[slides.length - 1];
+
+          setStatusColor(lastSlide, storyStatus);
+
+          //setStorySummaryWithLink(lastSlide, storyKey, url, storySummary);
+
+          setStorKeyWithLink(lastSlide, storyKey, url);
+
+          lastSlide.replaceAllText("{{epic}}", epicLink);
+
+          lastSlide.replaceAllText("{{story_title}}", storySummary);
+
+          lastSlide.replaceAllText("{{story_summary}}", storyDescription);
+
+          lastSlide.replaceAllText("{{story_ac}}", storyAcceptanceCriteria); // TODO remove "# Default checklist" and newline
+
+          //lastSlide.replaceAllText("{{story_status}}", storyStatus);
+
+          lastSlide.replaceAllText("{{owner}}", owner);
+
+          // TODO add subtasks if any to body text
+          
+          count++;
+
+        }
+      } catch (rowError) {
+        errorCount++;
+        console.log("Error processing row " + (rowIndex + 1) + ": " + rowError.toString());
+        // Continue processing other rows
       }
-      
-      // Mark this story key as processed
-      processedStoryKeys[storyKey] = true;
-
-      // add one more slide
-
-      presentation.appendSlide(templateSlide);
-
-      // update slides after appending a new slide
-
-      slides = presentation.getSlides();
-
-      var lastSlide = slides[slides.length - 1];
-
-      setStatusColor(lastSlide, storyStatus);
-
-      //setStorySummaryWithLink(lastSlide, storyKey, url, storySummary);
-
-      setStorKeyWithLink(lastSlide, storyKey, url);
-
-      lastSlide.replaceAllText("{{epic}}", epicLink);
-
-      lastSlide.replaceAllText("{{story_title}}", storySummary);
-
-      lastSlide.replaceAllText("{{story_summary}}", storyDescription);
-
-      lastSlide.replaceAllText("{{story_ac}}", storyAcceptanceCriteria); // TODO remove "# Default checklist" and newline
-
-      //lastSlide.replaceAllText("{{story_status}}", storyStatus);
-
-      lastSlide.replaceAllText("{{owner}}", owner);
-
-      // TODO add subtasks if any to body text
-      
-      count++;
-
     }
 
-  });
+    // delete the template slide
 
-  // delete the template slide
+    //templateSlide.remove();
 
-  //templateSlide.remove();
-
-  console.log("Slide deck creation completed. Total slides created: " + count);
-  console.log("=== fillTemplate() finished ===");
+    console.log("Slide deck creation completed. Total slides created: " + count);
+    if (errorCount > 0) {
+      console.log("WARNING: " + errorCount + " rows had errors and were skipped.");
+    }
+    console.log("=== fillTemplate() finished ===");
+    
+  } catch (error) {
+    console.log("FATAL ERROR in fillTemplate(): " + error.toString());
+    console.log("Stack trace: " + error.stack);
+    throw error;
+  }
 
 }
 
 function sortStoriesSheet() {
 
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  var sheet = ss.getSheets()[0];
+    var sheet = ss.getSheets()[0];
 
-  var range = sheet.getRange("A2:Z300");
+    var lastRow = sheet.getLastRow();
+    
+    if (lastRow < 2) {
+      console.log("No data rows to sort (only header or empty sheet)");
+      return;
+    }
 
-  // Sorts by Status
+    // Use actual data range instead of hardcoded range
+    var range = sheet.getRange("A2:Z" + lastRow);
 
-  range.sort(6);
+    // Sorts by Status (column F, index 6)
 
-  // Sorts by Epic
+    range.sort(6);
 
-  range.sort(2);
+    // Sorts by Epic (column C, index 2)
 
+    range.sort(2);
+    
+    console.log("Sheet sorted successfully");
+  } catch (error) {
+    console.log("Error sorting sheet: " + error.toString());
+    // Don't throw - sorting is not critical, continue with slide generation
+  }
 }
 
 // *** Helper functions *** 
 
 function setStorKeyWithLink(slide, storyKey, storyUrl) {
 
-  sha = getShapeWithText(slide, STORY_KEY_PATTERN);
+  var sha = getShapeWithText(slide, STORY_KEY_PATTERN);
 
-  setShapeUrl(sha, STORY_KEY_PATTERN, storyUrl, storyKey, "")
+  if (sha) {
+    setShapeUrl(sha, STORY_KEY_PATTERN, storyUrl, storyKey, "");
+  } else {
+    console.log("WARNING: Could not find shape with pattern " + STORY_KEY_PATTERN + " for story " + storyKey);
+  }
 
 }
 
 function setStorySummaryWithLink(slide, storyKey, storyUrl, storySummary) {
 
-  sha = getShapeWithText(slide, BODY_TEXT_PATTERN);
+  var sha = getShapeWithText(slide, BODY_TEXT_PATTERN);
 
-  setShapeUrl(sha, BODY_TEXT_PATTERN, storyUrl, storyKey, " " + storySummary)
+  if (sha) {
+    setShapeUrl(sha, BODY_TEXT_PATTERN, storyUrl, storyKey, " " + storySummary);
+  } else {
+    console.log("WARNING: Could not find shape with pattern " + BODY_TEXT_PATTERN + " for story " + storyKey);
+  }
 
 }
 
@@ -372,20 +451,22 @@ function getShapeWithText(slide, text) {
 
 function setShapeUrl(shape, pattern, url, urlText, postUrlText) {
 
+  if (!shape) {
+    console.log("WARNING: setShapeUrl called with null shape");
+    return;
+  }
+
   if (url) {
-
-    shape.getText().find(pattern)
-
-      .forEach((v) => {
-
-        const style = v.setText(urlText).getTextStyle();
-
-        style.setLinkUrl(url);
-
-        v.appendText(postUrlText);
-
-      })
-
+    try {
+      shape.getText().find(pattern)
+        .forEach((v) => {
+          const style = v.setText(urlText).getTextStyle();
+          style.setLinkUrl(url);
+          v.appendText(postUrlText);
+        });
+    } catch (e) {
+      console.log("WARNING: Error setting URL for pattern " + pattern + ": " + e.toString());
+    }
   }
 
 }
